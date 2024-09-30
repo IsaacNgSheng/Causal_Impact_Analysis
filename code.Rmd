@@ -1,0 +1,448 @@
+---
+title: "assignment1"
+output: html_document
+date: "2024-09-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+data <- read.csv('C:/Users/isaac/OneDrive/Documents/NUS/School_of_Computing/Y3S1/BT4241 Causal Impact Analysis/Assignments/Assignment1/Tikkot_data.csv')
+head(data)
+nrow(data)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+# Chi-Square Test for Gender
+table_gender <- table(data$Gender, data$Treatment)
+chisq.test(table_gender)
+
+# Chi-Square Test for OS
+table_os <- table(data$ios_vs_android, data$Treatment)
+chisq.test(table_os)
+```
+
+``` {r autocorrelation, echo=FALSE}
+# Treatment group T-Test
+t.test(past_active_time ~ Treatment, data = data)
+t.test(active_time ~ Treatment, data = data)
+
+# Converting Registration Date to Date_Type
+data1 <- data
+data1$registration_date <- as.Date(data1$registration_date)
+
+# Converting Registration Date to Numeric
+data1$days_since_registration <- as.numeric(data1$registration_date - min(data1$registration_date))
+
+# Conduct Test
+wilcox.test(days_since_registration ~ Treatment, data = data1)
+
+```
+
+```{r q2, echo=FALSE}
+# Grouping data by Treatment
+treatment_group <- data %>% filter(Treatment == 1)
+control_group <- data %>% filter(Treatment == 0)
+
+# Compute Stats
+mean_treatment <- mean(treatment_group$active_time)
+mean_control <- mean(control_group$active_time)
+
+var_treatment <- var(treatment_group$active_time)
+var_control <- var(control_group$active_time)
+
+n_treatment <- nrow(treatment_group)
+n_control <- nrow(control_group)
+
+pooled_se <- sqrt((var_treatment / n_treatment) + (var_control / n_control))
+t_statistic <- (mean_treatment - mean_control) / pooled_se
+df <- min(n_treatment - 1, n_control - 1)
+p_value <- 2 * (1 - pt(abs(t_statistic), df))
+
+# Compute ATE
+ATE <- mean_treatment - mean_control
+
+# Print results
+cat("ATE:", ATE, "\n")
+cat("T-statistic:", t_statistic, "\n")
+cat("P-value:", p_value, "\n")
+```
+
+```{r self-coded permutation test}
+# Set number of permutations
+n_permutations <- 1000
+
+# Compute observed ATE
+observed_ATE <- mean_treatment - mean_control
+
+# Storing ATEs
+perm_ATEs <- numeric(n_permutations)
+
+# Permutation loop
+for (i in 1:n_permutations) {
+  permuted_data <- data
+  permuted_data$Treatment <- sample(permuted_data$Treatment) # Shuffle Treatment
+  
+  # Compute permuted group means
+  perm_treatment_group <- permuted_data %>% filter(Treatment == 1)
+  perm_control_group <- permuted_data %>% filter(Treatment == 0)
+  
+  perm_mean_treatment <- mean(perm_treatment_group$active_time)
+  perm_mean_control <- mean(perm_control_group$active_time)
+  
+  # Compute permuted ATE
+  perm_ATEs[i] <- perm_mean_treatment - perm_mean_control
+}
+
+# Compute p-value as the proportion of permuted ATEs more extreme than observed ATE
+p_value_permutation <- mean(abs(perm_ATEs) >= abs(observed_ATE))
+
+# Results
+cat("Observed ATE:", observed_ATE, "\n")
+cat("Permutation Test P-value:", p_value_permutation, "\n")
+
+```
+
+```{r in-built t-test}
+# Built-in t-test for active_time by Treatment
+t_test_result <- t.test(active_time ~ Treatment, data = data)
+
+# Results
+t_test_result
+```
+
+```{r regression}
+# Linear Regression Model
+reg_model <- lm(active_time ~ Treatment, data = data)
+summary(reg_model)
+
+# Storing Coefficient of Treatment as ATE
+ATE_regression <- coef(reg_model)["Treatment"]
+cat("ATE from regression:", ATE_regression, "\n")
+
+```
+
+```{r q3}
+# Converting Registration Date to Numeric
+data$registration_date <- as.Date(data$registration_date)
+data$days_since_registration <- as.numeric(difftime(data$registration_date, min(data$registration_date), units = "days"))
+
+# Converting categorical variables to factors
+data$Gender <- as.factor(data$Gender)
+data$ios_vs_android <- as.factor(data$ios_vs_android)
+
+# Linear regression with interaction terms
+model_interaction <- lm(active_time ~ Treatment * Gender + 
+                                     Treatment * days_since_registration + 
+                                     Treatment * ios_vs_android, 
+                        data = data)
+
+# Summary of the model
+summary(model_interaction)
+
+# Calculating percentage of Android Users
+counts <- table(data$ios_vs_android)
+percentages <- prop.table(counts) * 100
+print(percentages)
+
+# Calculating percentage of Male Users
+counts <- table(data$Gender)
+percentages <- prop.table(counts) * 100
+print(percentages)
+```
+
+```{r q3 demand estimation}
+data <- read.csv('C:/Users/isaac/OneDrive/Documents/NUS/School_of_Computing/Y3S1/BT4241 Causal Impact Analysis/Assignments/Assignment1/grad.csv')
+head(data)
+
+data$categorical_weekend <- factor(data$weekend, ordered = FALSE)
+data$categorical_location <- factor(data$Location, ordered = FALSE)
+regression <- lm(q ~ p + categorical_weekend + categorical_location, data = data)
+summary(regression)
+
+iv_reg <- lm(p ~ discounts, data = data)
+summary(iv_reg)
+
+#Verify Correlation betweeen Price against Time and Location
+regression_price <- lm(p ~ weekend + Location, data = data)
+summary(regression_price)
+
+# Marginal Cost Stated is 5
+mc <- 5
+
+# Performing Regression to Attain Demand Function Coefficients
+demand_model <- lm(q ~ p + categorical_weekend + categorical_location, data = data)
+summary(demand_model)
+
+# Extract coefficients
+coeffs <- coefficients(demand_model)
+beta_0 <- coeffs[1]
+beta_1 <- coeffs[2]
+beta_2 <- coeffs[3]
+# Assume locations have three levels and coefficients for them are:
+beta_3_orchard <- coeffs["categorical_locationOrchard"]
+beta_3_mbs <- coeffs["categorical_locationMBS"]
+
+# Defining Optimal Price Function
+optimal_price <- function(beta_0, beta_1, beta_2, beta_3, mc) {
+  return((mc * beta_1 - beta_0 - beta_2 - beta_3) / (2 * beta_1))
+}
+
+# Calculating Optimal Price
+optimal_price_weekend_orchard <- optimal_price(beta_0, beta_1, beta_2, beta_3_orchard, mc)
+optimal_price_weekend_mbs <- optimal_price(beta_0, beta_1, beta_2, beta_3_mbs, mc)
+optimal_price_weekend_clarke_quay <- optimal_price(beta_0, beta_1, beta_2, 0, mc)
+optimal_price_weekday_orchard <- optimal_price(beta_0, beta_1, 0, beta_3_orchard, mc)
+optimal_price_weekday_mbs <- optimal_price(beta_0, beta_1, 0, beta_3_mbs, mc)
+optimal_price_weekday_clarke_quay <- optimal_price(beta_0, beta_1, 0, 0, mc)
+
+# Print optimal prices
+cat("Optimal Price on Weekend (Orchard):", optimal_price_weekend_orchard, "\n")
+cat("Optimal Price on Weekend (MBS):", optimal_price_weekend_mbs, "\n")
+cat("Optimal Price on Weekend (Clarke Quay):", optimal_price_weekend_clarke_quay, "\n")
+cat("Optimal Price on Weekday (Orchard):", optimal_price_weekday_orchard, "\n")
+cat("Optimal Price on Weekday (MBS):", optimal_price_weekday_mbs, "\n")
+cat("Optimal Price on Weekday (Clarke Quay):", optimal_price_weekday_clarke_quay, "\n")
+
+```
+
+```{r iv}
+library(AER)
+
+# Regress p on the instrument and other exogenous variables
+first_stage <- lm(p ~ discounts + weekend + Location, data = data)
+summary(first_stage)
+
+# Use the predicted values from the first stage in the main regression
+data$p_hat <- predict(first_stage)
+
+# IV regression
+iv_regression <- ivreg(q ~ p_hat + weekend + Location | discounts + weekend + Location, data = data)
+summary(iv_regression)
+
+```
+```{r compare prices}
+# Load the data
+data <- read.csv('C:/Users/isaac/OneDrive/Documents/NUS/School_of_Computing/Y3S1/BT4241 Causal Impact Analysis/Assignments/Assignment1/grad.csv')
+
+# Converting Categorical Variables to Factors
+data$weekend <- factor(data$weekend, ordered = FALSE)
+data$Location <- factor(data$Location, ordered = FALSE)
+
+# Computing Average Price for Weekend in Orchard
+avg_price_weekend_orchard <- data %>%
+  filter(weekend == 1, Location == "Orchard") %>%
+  summarize(avg_price = mean(p, na.rm = TRUE))
+
+# Computing Average Price for Weekend in MBS
+avg_price_weekend_mbs <- data %>%
+  filter(weekend == 1, Location == "MBS") %>%
+  summarize(avg_price = mean(p, na.rm = TRUE))
+
+# Computing Average Price for Weekend in Clarke Quay
+avg_price_weekend_clarke_quay <- data %>%
+  filter(weekend == 1, Location == "Clarke Quay") %>%
+  summarize(avg_price = mean(p, na.rm = TRUE))
+
+# Computing Average Price for Weekday in Orchard
+avg_price_weekday_orchard <- data %>%
+  filter(weekend == 0, Location == "Orchard") %>%
+  summarize(avg_price = mean(p, na.rm = TRUE))
+
+# Computing Average Price for Weekday in MBS
+avg_price_weekday_mbs <- data %>%
+  filter(weekend == 0, Location == "MBS") %>%
+  summarize(avg_price = mean(p, na.rm = TRUE))
+
+# Computing Average Price for Weekday in Clarke Quay
+avg_price_weekday_clarke_quay <- data %>%
+  filter(weekend == 0, Location == "Clarke Quay") %>%
+  summarize(avg_price = mean(p, na.rm = TRUE))
+
+# Compiling Results
+average_prices <- data.frame(
+  Condition = c("Weekend in Orchard", "Weekend in MBS", "Weekend in Clarke Quay",
+                "Weekday in Orchard", "Weekday in MBS", "Weekday in Clarke Quay"),
+  Average_Price = c(avg_price_weekend_orchard$avg_price, avg_price_weekend_mbs$avg_price, avg_price_weekend_clarke_quay$avg_price,
+                    avg_price_weekday_orchard$avg_price, avg_price_weekday_mbs$avg_price, avg_price_weekday_clarke_quay$avg_price)
+)
+
+print(average_prices)
+
+
+```
+
+```{r ladaza}
+library(ggplot2)
+library(pwr)
+
+data <- read.csv('C:/Users/isaac/OneDrive/Documents/NUS/School_of_Computing/Y3S1/BT4241 Causal Impact Analysis/Assignments/Assignment1/ladaza.csv')
+head(data)
+
+# Convert gender to factor
+data$gender <- factor(data$gender, levels = c("Male", "Female"))
+
+# Overlapping histogram for number of orders by gender
+ggplot(data, aes(x = number_of_orders, fill = gender)) +
+  geom_histogram(position = "identity", alpha = 0.5, bins = 30) +
+  labs(title = "Distribution of Number of Orders by Gender", x = "Number of Orders", y = "Frequency") +
+  theme_minimal() +
+  scale_fill_manual(values = c("blue", "pink"))
+
+# Overlapping histogram for GMV by gender
+ggplot(data, aes(x = gmv, fill = gender)) +
+  geom_histogram(position = "identity", alpha = 0.5, bins = 30) +
+  labs(title = "Distribution of GMV by Gender", x = "GMV", y = "Frequency") +
+  theme_minimal() +
+  scale_fill_manual(values = c("blue", "pink"))
+
+
+# Define the parameters
+effect_size <- 0.007
+alpha <- 0.05
+power <- 0.80
+N_c <- 50000000
+sd <- 1 # Replace with your estimated standard deviation
+
+# Calculate the effect size in terms of Cohen's d
+d <- effect_size / sd
+
+# Calculate the sample size for the treatment group
+sample_size <- tryCatch({
+  pwr.t2n.test(d = d, sig.level = alpha, power = power, n2 = N_c)
+}, error = function(e) {
+  cat("Error: ", e$message, "\n")
+  NULL
+})
+
+# Print the result
+if (!is.null(sample_size)) {
+  print(sample_size)
+} else {
+  cat("Failed to calculate the sample size. Please check the input parameters.\n")
+}
+
+
+
+# Define parameters
+effect_size <- 0.007  # 0.7% effect
+power <- 0.80        # 80% power
+alpha <- 0.05        # 5% significance level
+sigma <- 1           # Standard deviation (assumed)
+
+# Calculate the Z-scores
+z_alpha <- qnorm(1 - alpha / 2)
+z_beta <- qnorm(power)
+
+# Calculate the required sample size using the formula
+n <- ((z_alpha + z_beta)^2 * 2 * sigma^2) / effect_size^2
+
+# Print the required sample size
+cat("Required sample size for each group (treatment and control):", ceiling(n), "\n")
+
+# Assuming we use a control group size that is 10 times the treatment group size
+control_group_size <- 10 * ceiling(n)
+
+# Print the control group sizes for males and females
+cat("Control group size for males:", control_group_size, "\n")
+cat("Control group size for females:", control_group_size, "\n")
+
+
+# Calculate the mean
+mean_gmv <- mean(data$gmv)
+
+# Calculate the variance
+variance_gmv <- var(data$gmv)
+
+# Calculate the standard deviation
+std_dev_gmv <- sd(data$gmv, na.rm=TRUE)
+
+# Print the results
+cat("Mean GMV:", mean_gmv, "\n")
+cat("Variance GMV:", variance_gmv, "\n")
+cat("Standard Deviation GMV:", std_dev_gmv, "\n")
+proportions <- prop.table(table(data$gender))
+print(proportions)
+
+```
+
+```{r brilliant idea}
+# Load necessary library
+library(MASS)  # For statistical tests
+
+# Function to simulate an A/B test process
+simulate_ab_test <- function(p, max_N, alpha = 0.05) {
+  # Initialize counts for treatment and control groups
+  treatment_success <- 0
+  treatment_total <- 0
+  control_success <- 0
+  control_total <- 0
+  
+  # Initialize a counter for the total number of users
+  total_users <- 0
+  
+  # Loop until we reach the maximum number of observations
+  while (total_users < max_N) {
+    # Randomly assign users to treatment or control
+    if (runif(1) < p) {
+      # Treatment group
+      treatment_total <- treatment_total + 1
+      treatment_success <- treatment_success + rbinom(1, 1, 0.55)  # Assuming a success rate for treatment
+    } else {
+      # Control group
+      control_total <- control_total + 1
+      control_success <- control_success + rbinom(1, 1, 0.50)  # Assuming a success rate for control
+    }
+    
+    # Increase total users count
+    total_users <- total_users + 1
+    
+    # Ensure we have enough data for a valid statistical test
+    if (treatment_total > 0 && control_total > 0) {
+      # Create contingency table
+      contingency_table <- matrix(c(treatment_success, treatment_total - treatment_success,
+                                    control_success, control_total - control_success),
+                                  nrow = 2, byrow = TRUE)
+      
+      # Perform chi-squared test without continuity correction and suppress warnings
+      p_value <- suppressWarnings(chisq.test(contingency_table, correct = FALSE)$p.value)
+      
+      # Check if result is significant
+      if (!is.na(p_value) && p_value < alpha) {
+        cat("Stopping early: significant result detected after", total_users, "users.\n")
+        return(list(p_value = p_value, total_users = total_users, contingency_table = contingency_table))
+      }
+    }
+  }
+  
+  # If the loop completes, return the final result
+  cat("Test completed with max N. No significant result detected.\n")
+  return(list(p_value = p_value, total_users = total_users, contingency_table = contingency_table))
+}
+
+# Set parameters
+p <- 0.5   # Probability of assigning to treatment
+max_N <- 2000  # Maximum number of users
+alpha <- 0.05  # Significance level
+
+# Run the A/B test simulation
+result <- simulate_ab_test(p, max_N, alpha)
+
+# Print the result
+print(result)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
