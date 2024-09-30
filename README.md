@@ -42,10 +42,10 @@ Experimental Design in Ladaza E-commerce:
 - Run AA tests to critique a dynamic stopping rule for experiments.
 
 ## Key Results
-KOL Advertising: Identified the potential for bias in using promotion codes and proposed a regression-based approach for better ROI estimation.
-Tikkot Recommender System: Verified random assignment and provided statistically significant evidence that the new recommendation algorithm increases user engagement.
-Demand Estimation for Grad: Developed an IV-based demand function and proposed optimal pricing strategies for different regions and times.
-Ladaza Experiment Design: Highlighted flaws in the dynamic stopping approach, particularly the elevated false-positive rate in AA tests.
+- KOL Advertising: Identified the potential for bias in using promotion codes and proposed a regression-based approach for better ROI estimation.
+- Tikkot Recommender System: Verified random assignment and provided statistically significant evidence that the new recommendation algorithm increases user engagement.
+- Demand Estimation for Grad: Developed an IV-based demand function and proposed optimal pricing strategies for different regions and times.
+- Ladaza Experiment Design: Highlighted flaws in the dynamic stopping approach, particularly the elevated false-positive rate in AA tests.
 
 ## Conclusion
 This project showcases the application of advanced causal inference and experimental design techniques in solving real-world business problems. The results provide actionable insights into optimizing advertising strategies, improving recommender systems, and making data-driven pricing decisions.
